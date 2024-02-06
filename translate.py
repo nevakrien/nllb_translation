@@ -96,7 +96,7 @@ def get_quantmodel_and_tokenizer(tgt_lang="heb_Hebr",src_lang="eng_Latn"):
     model_name="facebook/nllb-200-3.3B"
     # Initialize the tokenizer and model
     tokenizer = NllbTokenizerFast.from_pretrained(model_name,tgt_lang=tgt_lang,src_lang=src_lang)
-    model = AutoModelForSeq2SeqLM.from_pretrained(model_name,load_in_4bit=True)
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_name,load_in_4bit=True,bnb_4bit_compute_dtype=torch.float16)
     #model.to('cpu')
     print(model.device)
 
