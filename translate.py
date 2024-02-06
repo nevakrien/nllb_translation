@@ -14,6 +14,7 @@ import gc
 
 SEP_TOKEN=2 #specific to nllb I just picked it up
 
+#repetition_penalty
 @torch.no_grad()
 def _translate_text_chunk(text,tgt_text,tokenizer,model,max_new_tokens=2000,num_beams=3):
     # Tokenize and translate the text
@@ -26,8 +27,8 @@ def _translate_text_chunk(text,tgt_text,tokenizer,model,max_new_tokens=2000,num_
 
     encoded_text={k:v.to(model.device) for k,v in encoded_text.items()}
 
-    generated_tokens=model.generate(**encoded_text, decoder_input_ids=tgt_tokens,max_new_tokens=max_new_tokens,
-            penalty_alpha=0.4,num_beams=num_beams).cpu()
+    generated_tokens=model.generate(**encoded_text, decoder_input_ids=tgt_tokens,max_new_tokens=max_new_tokens,num_beams=num_beams,
+            ).cpu()#penalty_alpha=0.4,repetition_penalty=1.2,).cpu()
 
     return tokenizer.decode(generated_tokens[0][tgt_tokens.shape[1]:], skip_special_tokens=True)
 
@@ -102,13 +103,13 @@ def get_quantmodel_and_tokenizer(tgt_lang="heb_Hebr",src_lang="eng_Latn"):
 
     return model,tokenizer
 
-def translate_text(text,tokenizer,model,num_beams=3):
+def translate_text(text,tokenizer,model,num_beams=3,max_new_tokens=10**4):
     ans=''
 
     prev=''
     for t in text.split('\n\n'):
         # try:
-        prev=_translate_text_chunk(t,prev,tokenizer,model,num_beams=num_beams)
+        prev=_translate_text_chunk(t,prev,tokenizer,model,num_beams=num_beams,max_new_tokens=max_new_tokens)
         # except torch.cuda.OutOfMemoryError:
         #     model.to('cpu')
         #     prev=_translate_text_chunk(t,prev,tokenizer,model)

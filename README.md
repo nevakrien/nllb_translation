@@ -6,3 +6,7 @@ regular gpu infrence seems unpractical at least for hebrew so I am keeping the c
 
 getting the best I can from the translation model using some extra tricks
 seems 4-bit works perfectly fine so we use that on gpu and then we can get a lot of beams going and its really good.
+
+##
+seems like spliting the text properly is the most important thing here
+thinking how to do that now
