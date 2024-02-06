@@ -7,8 +7,8 @@ from os.path import join
 SEP_TOKEN=2 #specific to nllb I just picked it up
 
 @torch.no_grad()
-def _translate_text_chunk(text,tgt_text,tokenizer,model,max_new_tokens=2000,gpu_len=1000):
-    gpu_len = min(gpu_len, max_new_tokens)
+def _translate_text_chunk(text,tgt_text,tokenizer,model,max_new_tokens=2000,gpu_len=2000):
+    
 
     # Tokenize and translate the text
     encoded_text = tokenizer(text, return_tensors="pt")
@@ -21,26 +21,30 @@ def _translate_text_chunk(text,tgt_text,tokenizer,model,max_new_tokens=2000,gpu_
     encoded_text={k:v.to(model.device) for k,v in encoded_text.items()}
 
     #gpu part
-    ans=model.generate(**encoded_text, decoder_input_ids=tgt_tokens,return_dict_in_generate=True,
-        penalty_alpha=0.4,max_length=gpu_len)
+    gpu_len = min(gpu_len, max_new_tokens+encoded_text['input_ids'].shape[-1]+tgt_tokens.shape[-1])
+
+    print('doing gpu')
+    generated_tokens=model.generate(**encoded_text, decoder_input_ids=tgt_tokens,
+        penalty_alpha=0.4,max_length=gpu_len).cpu()
 
 
     #cpu part
-    max_new_tokens-=len(ans['sequences'][0][tgt_tokens.shape[1]:])
-    if ans['sequences'][0][-1]!=SEP_TOKEN and max_new_tokens:
+    max_new_tokens-=len(generated_tokens[0][tgt_tokens.shape[1]:])
+
+    if max_new_tokens:
         print('doing cpu')
         device=model.device
+        #print(generated_tokens[0][-5:])
+        generated_tokens=generated_tokens[:,:-1] #removing eos
         
-        if model.device!='cpu':
-            model.to('cpu')
-            out['past_key_values']=[[x.cpu() for x in y] for y in out['past_key_values']]
+        model.to('cpu')
 
-        ans = model.generate(past_key_values=out['past_key_values'],return_dict_in_generate=True,
+        generated_tokens = model.generate(generated_tokens,
             max_new_tokens=max_new_tokens,penalty_alpha=0.4)
 
         model.to(device)
+        print('done cpu')
 
-    generated_tokens=ans['sequences']
 
     # Decode and return the translated text
     return tokenizer.decode(generated_tokens[0][tgt_tokens.shape[1]:], skip_special_tokens=True)
