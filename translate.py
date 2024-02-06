@@ -3,13 +3,15 @@ import torch
 
 import os 
 from os.path import join
+import gc
+
+
+
 
 SEP_TOKEN=2 #specific to nllb I just picked it up
 
 @torch.no_grad()
-def _translate_text_chunk(text,tgt_text,tokenizer,model,max_new_tokens=2000,gpu_len=2000):
-    
-
+def _translate_text_chunk(text,tgt_text,tokenizer,model,max_new_tokens=2000,gpu_len=1000):
     # Tokenize and translate the text
     encoded_text = tokenizer(text, return_tensors="pt")
     #manual fix to hf bug 
@@ -22,16 +24,22 @@ def _translate_text_chunk(text,tgt_text,tokenizer,model,max_new_tokens=2000,gpu_
 
     #gpu part
     gpu_len = min(gpu_len, max_new_tokens+encoded_text['input_ids'].shape[-1]+tgt_tokens.shape[-1])
+    
 
-    print('doing gpu')
-    generated_tokens=model.generate(**encoded_text, decoder_input_ids=tgt_tokens,
-        penalty_alpha=0.4,max_length=gpu_len).cpu()
+    if(tgt_tokens.shape[1]>gpu_len or model.device=='cpu'):
+        generated_tokens=tgt_tokens
+
+    else:
+        print('doing gpu')
+        gc.collect() #clear lingering gpu memory in time for next alocation
+        generated_tokens=model.generate(**encoded_text, decoder_input_ids=tgt_tokens,max_length=gpu_len,
+            ).cpu()#penalty_alpha=0.4).cpu()
 
 
     #cpu part
     max_new_tokens-=len(generated_tokens[0][tgt_tokens.shape[1]:])
 
-    if max_new_tokens:
+    if max_new_tokens and generated_tokens.shape[-1]>=gpu_len:
         print('doing cpu')
         device=model.device
         #print(generated_tokens[0][-5:])
@@ -39,8 +47,8 @@ def _translate_text_chunk(text,tgt_text,tokenizer,model,max_new_tokens=2000,gpu_
         
         model.to('cpu')
 
-        generated_tokens = model.generate(generated_tokens,
-            max_new_tokens=max_new_tokens,penalty_alpha=0.4)
+        generated_tokens = model.generate(generated_tokens,max_new_tokens=max_new_tokens,
+            )   #penalty_alpha=0.4)
 
         model.to(device)
         print('done cpu')
