@@ -7,7 +7,9 @@ from os.path import join
 SEP_TOKEN=2 #specific to nllb I just picked it up
 
 @torch.no_grad()
-def _translate_text_chunk(text,tgt_text,tokenizer,model,max_new_tokens=2000):
+def _translate_text_chunk(text,tgt_text,tokenizer,model,max_new_tokens=2000,gpu_len=1000):
+    gpu_len = min(gpu_len, max_new_tokens)
+
     # Tokenize and translate the text
     encoded_text = tokenizer(text, return_tensors="pt")
     #manual fix to hf bug 
@@ -17,8 +19,28 @@ def _translate_text_chunk(text,tgt_text,tokenizer,model,max_new_tokens=2000):
     tgt_tokens=torch.LongTensor([[SEP_TOKEN,tokenizer.lang_code_to_id[tokenizer.tgt_lang]]+tgt_tokens]).to(model.device)
 
     encoded_text={k:v.to(model.device) for k,v in encoded_text.items()}
-    generated_tokens = model.generate(**encoded_text, decoder_input_ids=tgt_tokens,
-        max_new_tokens=max_new_tokens,penalty_alpha=0.4).cpu()
+
+    #gpu part
+    ans=model.generate(**encoded_text, decoder_input_ids=tgt_tokens,return_dict_in_generate=True,
+        penalty_alpha=0.4,max_length=gpu_len)
+
+
+    #cpu part
+    max_new_tokens-=len(ans['sequences'][0][tgt_tokens.shape[1]:])
+    if ans['sequences'][0][-1]!=SEP_TOKEN and max_new_tokens:
+        print('doing cpu')
+        device=model.device
+        
+        if model.device!='cpu':
+            model.to('cpu')
+            out['past_key_values']=[[x.cpu() for x in y] for y in out['past_key_values']]
+
+        ans = model.generate(past_key_values=out['past_key_values'],return_dict_in_generate=True,
+            max_new_tokens=max_new_tokens,penalty_alpha=0.4)
+
+        model.to(device)
+
+    generated_tokens=ans['sequences']
 
     # Decode and return the translated text
     return tokenizer.decode(generated_tokens[0][tgt_tokens.shape[1]:], skip_special_tokens=True)
@@ -39,12 +61,12 @@ def translate_text(text,tokenizer,model):
 
     prev=''
     for t in text.split('\n\n'):
-        try:
-            prev=_translate_text_chunk(t,prev,tokenizer,model)
-        except torch.cuda.OutOfMemoryError:
-            model.to('cpu')
-            prev=_translate_text_chunk(t,prev,tokenizer,model)
-            model.to('cuda')
+        # try:
+        prev=_translate_text_chunk(t,prev,tokenizer,model)
+        # except torch.cuda.OutOfMemoryError:
+        #     model.to('cpu')
+        #     prev=_translate_text_chunk(t,prev,tokenizer,model)
+        #     model.to('cuda')
         ans+='\n\n'+prev
     return ans
 
@@ -79,7 +101,8 @@ if __name__=="__main__":
     # for text in english_texts:
     #     print(text)  
     text=english_texts[0]
-    model,tokenizer=get_model_and_tokenizer()#cuda=False)
+    
+    model,tokenizer=get_model_and_tokenizer()
     print(text)
     print(10*'\n')
     trans=translate_text(text,tokenizer,model)
