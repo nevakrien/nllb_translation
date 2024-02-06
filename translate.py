@@ -47,7 +47,7 @@ def _translate_text_chunk(text,tgt_text,tokenizer,model,max_new_tokens=2000,gpu_
         
         model.to('cpu')
 
-        generated_tokens = model.generate(generated_tokens,max_new_tokens=max_new_tokens,
+        generated_tokens = model.generate(**encoded_text, decoder_input_ids=generated_tokens,max_new_tokens=max_new_tokens,
             )   #penalty_alpha=0.4)
 
         model.to(device)
