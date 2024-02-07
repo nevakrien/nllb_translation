@@ -1,7 +1,3 @@
-# import os
-
-# # Make CUDA devices invisible to PyTorch
-# os.environ['CUDA_VISIBLE_DEVICES'] = ''
 from transformers import AutoModelForSeq2SeqLM, NllbTokenizerFast
 import torch
 
@@ -9,6 +5,7 @@ import os
 from os.path import join
 import gc
 
+from gen_utils import StopRepeats
 
 
 
@@ -28,7 +25,9 @@ def _translate_text_chunk(text,tgt_text,tokenizer,model,max_new_tokens=2000,num_
     encoded_text={k:v.to(model.device) for k,v in encoded_text.items()}
 
     generated_tokens=model.generate(**encoded_text, decoder_input_ids=tgt_tokens,max_new_tokens=max_new_tokens,num_beams=num_beams,
-            no_repeat_ngram_size=10).cpu()#penalty_alpha=0.4,repetition_penalty=1.2,).cpu()
+            no_repeat_ngram_size=10,
+            logits_processor=[StopRepeats(count=3,ngram_size=2,context=10)],
+            ).cpu()#penalty_alpha=0.4,repetition_penalty=1.2,).cpu()
 
     return tokenizer.decode(generated_tokens[0][tgt_tokens.shape[1]:], skip_special_tokens=True)
 
