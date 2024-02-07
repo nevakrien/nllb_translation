@@ -28,57 +28,10 @@ def _translate_text_chunk(text,tgt_text,tokenizer,model,max_new_tokens=2000,num_
     encoded_text={k:v.to(model.device) for k,v in encoded_text.items()}
 
     generated_tokens=model.generate(**encoded_text, decoder_input_ids=tgt_tokens,max_new_tokens=max_new_tokens,num_beams=num_beams,
-            ).cpu()#penalty_alpha=0.4,repetition_penalty=1.2,).cpu()
+            no_repeat_ngram_size=10).cpu()#penalty_alpha=0.4,repetition_penalty=1.2,).cpu()
 
     return tokenizer.decode(generated_tokens[0][tgt_tokens.shape[1]:], skip_special_tokens=True)
 
-
-@torch.no_grad()
-def _translate_text_chunk_failsafe(text,tgt_text,tokenizer,model,max_new_tokens=2000,gpu_len=1000):
-    # Tokenize and translate the text
-    encoded_text = tokenizer(text, return_tensors="pt")
-    #manual fix to hf bug 
-    encoded_text['input_ids'][:,1]=tokenizer.lang_code_to_id[tokenizer.src_lang]
-
-    tgt_tokens=tokenizer.encode(tgt_text,add_special_tokens=False)
-    tgt_tokens=torch.LongTensor([[SEP_TOKEN,tokenizer.lang_code_to_id[tokenizer.tgt_lang]]+tgt_tokens]).to(model.device)
-
-    encoded_text={k:v.to(model.device) for k,v in encoded_text.items()}
-
-    #gpu part
-    gpu_len = min(gpu_len, max_new_tokens+encoded_text['input_ids'].shape[-1]+tgt_tokens.shape[-1])
-    
-
-    if(tgt_tokens.shape[1]>gpu_len or model.device=='cpu'):
-        generated_tokens=tgt_tokens
-
-    else:
-        print('doing gpu')
-        gc.collect() #clear lingering gpu memory in time for next alocation
-        generated_tokens=model.generate(**encoded_text, decoder_input_ids=tgt_tokens,max_length=gpu_len,
-            ).cpu()#penalty_alpha=0.4).cpu()
-
-
-    #cpu part
-    max_new_tokens-=len(generated_tokens[0][tgt_tokens.shape[1]:])
-
-    if max_new_tokens and generated_tokens.shape[-1]>=gpu_len:
-        print('doing cpu')
-        device=model.device
-        #print(generated_tokens[0][-5:])
-        generated_tokens=generated_tokens[:,:-1] #removing eos
-        
-        model.to('cpu')
-
-        generated_tokens = model.generate(**encoded_text, decoder_input_ids=generated_tokens,max_new_tokens=max_new_tokens,
-            )   #penalty_alpha=0.4)
-
-        model.to(device)
-        print('done cpu')
-
-
-    # Decode and return the translated text
-    return tokenizer.decode(generated_tokens[0][tgt_tokens.shape[1]:], skip_special_tokens=True)
 
 def get_model_and_tokenizer(tgt_lang="heb_Hebr",src_lang="eng_Latn",cuda=True):
     model_name="facebook/nllb-200-3.3B"
@@ -147,7 +100,7 @@ if __name__=="__main__":
     # # Print the retrieved English texts
     # for text in english_texts:
     #     print(text)  
-    text=english_texts[0]
+    text=english_texts[2]
     
     model,tokenizer=get_quantmodel_and_tokenizer()#get_model_and_tokenizer()
     print(text)
