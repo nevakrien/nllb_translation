@@ -5,7 +5,7 @@ import os
 from os.path import join
 import gc
 
-from gen_utils import StopRepeats
+from gen_utils import StopRepeats,StopRepeatsDebug
 
 
 
@@ -25,11 +25,38 @@ def _translate_text_chunk(text,tgt_text,tokenizer,model,max_new_tokens=2000,num_
     encoded_text={k:v.to(model.device) for k,v in encoded_text.items()}
 
     generated_tokens=model.generate(**encoded_text, decoder_input_ids=tgt_tokens,max_new_tokens=max_new_tokens,num_beams=num_beams,
-            no_repeat_ngram_size=10,
-            logits_processor=[StopRepeats(count=3,ngram_size=1,context=10)],
+            #no_repeat_ngram_size=10,
+            #do_sample=True,
+            logits_processor=[StopRepeats(count=3,ngram_size=1,context=30)],
             ).cpu()#penalty_alpha=0.4,repetition_penalty=1.2,).cpu()
 
+    #print(generated_tokens[0][tgt_tokens.shape[1]:])
+
     return tokenizer.decode(generated_tokens[0][tgt_tokens.shape[1]:], skip_special_tokens=True)
+
+@torch.no_grad()
+def _debug_translate_text_chunk(text,tgt_text,tokenizer,model,stoper,max_new_tokens=2000,num_beams=3):
+    # Tokenize and translate the text
+    encoded_text = tokenizer(text, return_tensors="pt")
+    #manual fix to hf bug 
+    encoded_text['input_ids'][:,1]=tokenizer.lang_code_to_id[tokenizer.src_lang]
+
+    tgt_tokens=tokenizer.encode(tgt_text,add_special_tokens=False)
+    tgt_tokens=torch.LongTensor([[SEP_TOKEN,tokenizer.lang_code_to_id[tokenizer.tgt_lang]]+tgt_tokens]).to(model.device)
+
+    encoded_text={k:v.to(model.device) for k,v in encoded_text.items()}
+
+    generated_tokens=model.generate(**encoded_text, decoder_input_ids=tgt_tokens,max_new_tokens=max_new_tokens,num_beams=num_beams,
+            #no_repeat_ngram_size=10,
+            #do_sample=True,
+            logits_processor=[stoper],
+            
+            num_return_sequences=num_beams,
+            ).cpu()#penalty_alpha=0.4,repetition_penalty=1.2,).cpu()
+
+    #print(generated_tokens[0][tgt_tokens.shape[1]:])
+
+    return tokenizer.decode(generated_tokens[0][tgt_tokens.shape[1]:], skip_special_tokens=True),generated_tokens
 
 
 def get_model_and_tokenizer(tgt_lang="heb_Hebr",src_lang="eng_Latn",cuda=True):
@@ -55,7 +82,7 @@ def get_quantmodel_and_tokenizer(tgt_lang="heb_Hebr",src_lang="eng_Latn"):
 
     return model,tokenizer
 
-def translate_text(text,tokenizer,model,num_beams=3,max_new_tokens=10**4):
+def translate_text(text,tokenizer,model,num_beams=10,max_new_tokens=10**4):
     ans=''
 
     prev=''
@@ -68,6 +95,26 @@ def translate_text(text,tokenizer,model,num_beams=3,max_new_tokens=10**4):
         #     model.to('cuda')
         ans+='\n\n'+prev
     return ans
+
+def gen_translate_text(text,tokenizer,model,num_beams=10,max_new_tokens=10**4):
+    prev=''
+    for t in text.split('\n\n'):
+        prev=_translate_text_chunk(t,prev,tokenizer,model,num_beams=num_beams,max_new_tokens=max_new_tokens)
+        yield '\n\n'+prev
+
+#dont use this
+def debug_test(text,tokenizer,model,num_beams=10,max_new_tokens=10**4):
+    
+    prev=''
+    for t in text.split('\n\n'):
+        stoper=StopRepeatsDebug(count=3,ngram_size=1,context=30)
+        prev,toks=_debug_translate_text_chunk(t,prev,tokenizer,model,stoper,num_beams=num_beams,max_new_tokens=max_new_tokens)
+        print('\n\n'+prev)
+    #return ans
+    print(10*'\n')
+    print(stoper.scores)
+    print(10*'\n')
+    print(toks)
 
 if __name__=="__main__":
     import sqlite3
@@ -99,11 +146,25 @@ if __name__=="__main__":
     # # Print the retrieved English texts
     # for text in english_texts:
     #     print(text)  
-    text=english_texts[2]
+    text=english_texts[3]
     
     model,tokenizer=get_quantmodel_and_tokenizer()#get_model_and_tokenizer()
-    print(text)
-    print(10*'\n')
-    trans=translate_text(text,tokenizer,model)
-    print(trans)
+    
+    #debug_test(text,tokenizer,model)    
+    # for text in english_texts[:]:
+    #     print(text)
+    #     print(10*'\n')
+    #     trans=translate_text(text,tokenizer,model)
+    #     print(trans)
+    #     print(10*'\n')
+    
+    for text in english_texts[:]:
+        print(text)
+        print(10*'\n')
+        for trans in gen_translate_text(text,tokenizer,model):
+            if(trans.replace('\n','').replace(' ','')==''):
+                print("\n\n!!!empty!!!")
+            else:
+                print(trans)
+        print(10*'\n')
     

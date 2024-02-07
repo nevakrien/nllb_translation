@@ -66,6 +66,20 @@ class StopRepeats(LogitsProcessor):
 
         return scores
 
+class StopRepeatsDebug(LogitsProcessor):
+    #stop repeating values of ngram_size or more inside the context 
+    #for instance abcabc is repeating twice has an ngram_size of 3 and fits in a context of 6
+    def __init__(self, count,ngram_size,context):
+        self.call=StopRepeats(count,ngram_size,context)
+        #self.inputs=[]
+        self.scores=[]
+    def __call__(self, input_ids, scores):#encoder_input_ids
+        ans=self.call(input_ids,scores)
+        self.scores.append(ans.clone())
+        return ans
+
+
+
 def test_stop_repeats():
     count=3
     ngram_size=4
@@ -96,9 +110,46 @@ def test_stop_repeats():
     #print(scores[bad_beams])
     assert (scores[~bad_beams]==1).all()
 
+def test_stop_repeats2():
+    count=3
+    ngram_size=4
+    context=100
+    beam = 10
+
+    processor=StopRepeats(count=count,ngram_size=ngram_size,context=context)
+    input_ids=torch.stack([torch.arange(0,context+10,dtype=int) for _ in range(beam)])
+    #print(input_ids)
+
+    bad_beams=torch.rand(beam)>0.2
+    #print(bad_beams)
+
+    bads=torch.concat([torch.arange(4) for _ in range(context)])[:context]
+    input_ids[bad_beams,-context:]=bads
+    #print(input_ids)
+
+    scores=torch.ones([beam,input_ids.max()+13])
+    #print(scores.shape)
+    #print(input_ids.max())
+    #print(input_ids)
+    ans=processor(input_ids,scores)
+
+    if ans is scores:
+        pass
+        #print('modifies')
+    #print(scores)
+    assert (scores[bad_beams,bads[-1]]==float("-inf")).all()
+
+    for i in range(scores.shape[-1]):
+        if(i !=bads[-1]):
+            assert (scores[bad_beams,i]==1).all()
+    #print(scores[bad_beams])
+    assert (scores[~bad_beams]==1).all()
+
+
 if __name__=="__main__":
     for _ in range(100):
         test_stop_repeats()
+        test_stop_repeats2()
 
     model_name="facebook/nllb-200-3.3B"
     # Initialize the tokenizer and model
