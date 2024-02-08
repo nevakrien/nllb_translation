@@ -5,7 +5,7 @@ import os
 from os.path import join
 import gc
 
-from gen_utils import StopRepeats,StopRepeatsDebug
+from gen_utils import StopRepeats,StopRepeatsDebug,find_most_repeating_pattern
 
 
 
@@ -27,10 +27,14 @@ def _translate_text_chunk(text,tgt_text,tokenizer,model,max_new_tokens=2000,num_
     generated_tokens=model.generate(**encoded_text, decoder_input_ids=tgt_tokens,max_new_tokens=max_new_tokens,num_beams=num_beams,
             #no_repeat_ngram_size=10,
             #do_sample=True,
-            logits_processor=[StopRepeats(count=3,ngram_size=1,context=30)],
+            logits_processor=[StopRepeats(count=3,ngram_size=1,context=40)],
             ).cpu()#penalty_alpha=0.4,repetition_penalty=1.2,).cpu()
 
-    #print(generated_tokens[0][tgt_tokens.shape[1]:])
+    #this test proves something is very weird because it shows repeats
+    # print(generated_tokens[0][tgt_tokens.shape[1]:])
+    # patern,repeats=find_most_repeating_pattern(generated_tokens[0][tgt_tokens.shape[1]:].numpy())
+    # print(patern)
+    # assert repeats<=3 #double checking my gen work
 
     return tokenizer.decode(generated_tokens[0][tgt_tokens.shape[1]:], skip_special_tokens=True)
 
@@ -82,24 +86,27 @@ def get_quantmodel_and_tokenizer(tgt_lang="heb_Hebr",src_lang="eng_Latn"):
 
     return model,tokenizer
 
-def translate_text(text,tokenizer,model,num_beams=10,max_new_tokens=10**4):
-    ans=''
+# def translate_text(text,tokenizer,model,num_beams=10,max_new_tokens=10**4):
+#     ans=''
 
-    prev=''
-    for t in text.split('\n\n'):
-        # try:
-        prev=_translate_text_chunk(t,prev,tokenizer,model,num_beams=num_beams,max_new_tokens=max_new_tokens)
-        # except torch.cuda.OutOfMemoryError:
-        #     model.to('cpu')
-        #     prev=_translate_text_chunk(t,prev,tokenizer,model)
-        #     model.to('cuda')
-        ans+='\n\n'+prev
-    return ans
+#     prev=''
+#     for t in text.split('\n\n'):
+#         # try:
+#         prev=_translate_text_chunk(t,prev,tokenizer,model,num_beams=num_beams,max_new_tokens=max_new_tokens)
+#         # except torch.cuda.OutOfMemoryError:
+#         #     model.to('cpu')
+#         #     prev=_translate_text_chunk(t,prev,tokenizer,model)
+#         #     model.to('cuda')
+#         ans+='\n\n'+prev
+#     return ans
 
 def gen_translate_text(text,tokenizer,model,num_beams=10,max_new_tokens=10**4):
     prev=''
     for t in text.split('\n\n'):
         prev=_translate_text_chunk(t,prev,tokenizer,model,num_beams=num_beams,max_new_tokens=max_new_tokens)
+        if(prev.replace('\n','').replace(' ','')==''):
+            #print('!!!problematic:')
+            prev=_translate_text_chunk(t,'',tokenizer,model,num_beams=num_beams,max_new_tokens=max_new_tokens)
         yield '\n\n'+prev
 
 #dont use this
@@ -158,7 +165,7 @@ if __name__=="__main__":
     #     print(trans)
     #     print(10*'\n')
     
-    for text in english_texts[:]:
+    for text in english_texts[-2:]:
         print(text)
         print(10*'\n')
         for trans in gen_translate_text(text,tokenizer,model):
