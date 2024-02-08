@@ -114,14 +114,24 @@ def debug_test(text,tokenizer,model,num_beams=10,max_new_tokens=10**4):
     
     prev=''
     for t in text.split('\n\n'):
-        stoper=StopRepeatsDebug(count=3,ngram_size=1,context=30)
+        stoper=StopRepeatsDebug(count=3,ngram_size=1,context=40)
         prev,toks=_debug_translate_text_chunk(t,prev,tokenizer,model,stoper,num_beams=num_beams,max_new_tokens=max_new_tokens)
+        if(prev.replace('\n','').replace(' ','')==''):
+            stoper=StopRepeatsDebug(count=3,ngram_size=1,context=40)
+            prev,toks=_debug_translate_text_chunk(t,'',tokenizer,model, stoper,num_beams=num_beams,max_new_tokens=max_new_tokens)
         print('\n\n'+prev)
+        print(10*'\n')
+        print([score[:,54505] for score in stoper.scores])
     #return ans
-    print(10*'\n')
-    print(stoper.scores)
-    print(10*'\n')
-    print(toks)
+    # print(10*'\n')
+    # print([score[:,54505] for score in stoper.scores])
+    #print(stoper.scores)
+    #print(10*'\n')
+    #print([torch.where(x == float('-inf'))[0] for x in stoper.scores])
+    #print(10*'\n')
+    #print(toks)
+    #print(10*'\n')
+    #print(stoper.inputs)
 
 if __name__=="__main__":
     import sqlite3
@@ -153,7 +163,7 @@ if __name__=="__main__":
     # # Print the retrieved English texts
     # for text in english_texts:
     #     print(text)  
-    text=english_texts[3]
+    text=english_texts[-2:][0]
     
     model,tokenizer=get_quantmodel_and_tokenizer()#get_model_and_tokenizer()
     
@@ -173,5 +183,5 @@ if __name__=="__main__":
                 print("\n\n!!!empty!!!")
             else:
                 print(trans)
-        print(10*'\n')
+        print(5*'\n')
     
