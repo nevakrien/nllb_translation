@@ -5,7 +5,7 @@ import os
 from os.path import join
 import gc
 
-from gen_utils import StopRepeats,StopRepeatsDebug,find_most_repeating_pattern
+from gen_utils import StopRepeats,StopRepeatsDebug
 
 
 
@@ -55,7 +55,7 @@ def _debug_translate_text_chunk(text,tgt_text,tokenizer,model,stoper,max_new_tok
             #do_sample=True,
             logits_processor=[stoper],
             
-            num_return_sequences=num_beams,
+            #num_return_sequences=num_beams,
             ).cpu()#penalty_alpha=0.4,repetition_penalty=1.2,).cpu()
 
     #print(generated_tokens[0][tgt_tokens.shape[1]:])
@@ -82,7 +82,7 @@ def get_quantmodel_and_tokenizer(tgt_lang="heb_Hebr",src_lang="eng_Latn"):
     tokenizer = NllbTokenizerFast.from_pretrained(model_name,tgt_lang=tgt_lang,src_lang=src_lang)
     model = AutoModelForSeq2SeqLM.from_pretrained(model_name,load_in_4bit=True,bnb_4bit_compute_dtype=torch.float16)
     #model.to('cpu')
-    print(model.device)
+    #print(model.device)
 
     return model,tokenizer
 
@@ -113,7 +113,7 @@ def gen_translate_text(text,tokenizer,model,num_beams=10,max_new_tokens=10**4):
 def debug_test(text,tokenizer,model,num_beams=10,max_new_tokens=10**4):
     
     prev=''
-    for t in text.split('\n\n'):
+    for i,t in enumerate(text.split('\n\n')):
         stoper=StopRepeatsDebug(count=3,ngram_size=1,context=40)
         prev,toks=_debug_translate_text_chunk(t,prev,tokenizer,model,stoper,num_beams=num_beams,max_new_tokens=max_new_tokens)
         if(prev.replace('\n','').replace(' ','')==''):
@@ -121,7 +121,17 @@ def debug_test(text,tokenizer,model,num_beams=10,max_new_tokens=10**4):
             prev,toks=_debug_translate_text_chunk(t,'',tokenizer,model, stoper,num_beams=num_beams,max_new_tokens=max_new_tokens)
         print('\n\n'+prev)
         print(10*'\n')
-        print([score[:,54505] for score in stoper.scores])
+        # pat,rep=find_most_repeating_pattern(toks)
+        #print(rep)
+        #if(rep>3):
+        #print(toks)
+        #print([score[:,54505] for score in stoper.scores])
+        if(i>=9):
+            shows=list(set(toks[0][-40:-2]))
+            print(toks[0][-40:-2])
+            print(all([t in shows for t,c in enumerate(stoper.scores[-40:-2])]))
+            print([{s.item():x[:,s] for s in shows} for x in stoper.scores[-40:-2]])
+
     #return ans
     # print(10*'\n')
     # print([score[:,54505] for score in stoper.scores])
@@ -167,7 +177,7 @@ if __name__=="__main__":
     
     model,tokenizer=get_quantmodel_and_tokenizer()#get_model_and_tokenizer()
     
-    #debug_test(text,tokenizer,model)    
+    debug_test(text,tokenizer,model)    
     # for text in english_texts[:]:
     #     print(text)
     #     print(10*'\n')
@@ -175,13 +185,13 @@ if __name__=="__main__":
     #     print(trans)
     #     print(10*'\n')
     
-    for text in english_texts[-2:]:
-        print(text)
-        print(10*'\n')
-        for trans in gen_translate_text(text,tokenizer,model):
-            if(trans.replace('\n','').replace(' ','')==''):
-                print("\n\n!!!empty!!!")
-            else:
-                print(trans)
-        print(5*'\n')
+    # for text in english_texts[-2:]:
+    #     print(text)
+    #     print(10*'\n')
+    #     for trans in gen_translate_text(text,tokenizer,model):
+    #         if(trans.replace('\n','').replace(' ','')==''):
+    #             print("\n\n!!!empty!!!")
+    #         else:
+    #             print(trans)
+    #     print(5*'\n')
     
