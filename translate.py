@@ -1,67 +1,11 @@
+#from translate import get_quantmodel_and_tokenizer
 from transformers import AutoModelForSeq2SeqLM, NllbTokenizerFast
 import torch
-
 import os 
 from os.path import join
-import gc
-
-from gen_utils import StopRepeats,StopRepeatsDebug
-
-
+import stanza
 
 SEP_TOKEN=2 #specific to nllb I just picked it up
-
-#repetition_penalty
-@torch.no_grad()
-def _translate_text_chunk(text,tgt_text,tokenizer,model,max_new_tokens=2000,num_beams=3):
-    # Tokenize and translate the text
-    encoded_text = tokenizer(text, return_tensors="pt")
-    #manual fix to hf bug 
-    encoded_text['input_ids'][:,1]=tokenizer.lang_code_to_id[tokenizer.src_lang]
-
-    tgt_tokens=tokenizer.encode(tgt_text,add_special_tokens=False)
-    tgt_tokens=torch.LongTensor([[SEP_TOKEN,tokenizer.lang_code_to_id[tokenizer.tgt_lang]]+tgt_tokens]).to(model.device)
-
-    encoded_text={k:v.to(model.device) for k,v in encoded_text.items()}
-
-    generated_tokens=model.generate(**encoded_text, decoder_input_ids=tgt_tokens,max_new_tokens=max_new_tokens,num_beams=num_beams,
-            #no_repeat_ngram_size=10,
-            #do_sample=True,
-            logits_processor=[StopRepeats(count=3,ngram_size=1,context=40)],
-            ).cpu()#penalty_alpha=0.4,repetition_penalty=1.2,).cpu()
-
-    #this test proves something is very weird because it shows repeats
-    # print(generated_tokens[0][tgt_tokens.shape[1]:])
-    # patern,repeats=find_most_repeating_pattern(generated_tokens[0][tgt_tokens.shape[1]:].numpy())
-    # print(patern)
-    # assert repeats<=3 #double checking my gen work
-
-    return tokenizer.decode(generated_tokens[0][tgt_tokens.shape[1]:], skip_special_tokens=True)
-
-@torch.no_grad()
-def _debug_translate_text_chunk(text,tgt_text,tokenizer,model,stoper,max_new_tokens=2000,num_beams=3):
-    # Tokenize and translate the text
-    encoded_text = tokenizer(text, return_tensors="pt")
-    #manual fix to hf bug 
-    encoded_text['input_ids'][:,1]=tokenizer.lang_code_to_id[tokenizer.src_lang]
-
-    tgt_tokens=tokenizer.encode(tgt_text,add_special_tokens=False)
-    tgt_tokens=torch.LongTensor([[SEP_TOKEN,tokenizer.lang_code_to_id[tokenizer.tgt_lang]]+tgt_tokens]).to(model.device)
-
-    encoded_text={k:v.to(model.device) for k,v in encoded_text.items()}
-
-    generated_tokens=model.generate(**encoded_text, decoder_input_ids=tgt_tokens,max_new_tokens=max_new_tokens,num_beams=num_beams,
-            #no_repeat_ngram_size=10,
-            #do_sample=True,
-            logits_processor=[stoper],
-            
-            #num_return_sequences=num_beams,
-            ).cpu()#penalty_alpha=0.4,repetition_penalty=1.2,).cpu()
-
-    #print(generated_tokens[0][tgt_tokens.shape[1]:])
-
-    return tokenizer.decode(generated_tokens[0][tgt_tokens.shape[1]:], skip_special_tokens=True),generated_tokens
-
 
 def get_model_and_tokenizer(tgt_lang="heb_Hebr",src_lang="eng_Latn",cuda=True):
     model_name="facebook/nllb-200-3.3B"
@@ -86,112 +30,102 @@ def get_quantmodel_and_tokenizer(tgt_lang="heb_Hebr",src_lang="eng_Latn"):
 
     return model,tokenizer
 
-# def translate_text(text,tokenizer,model,num_beams=10,max_new_tokens=10**4):
-#     ans=''
+@torch.no_grad()
+def translate_text_chunk(text,tokenizer,model,max_new_tokens=2000,num_beams=3):
+    lang_token=tokenizer.lang_code_to_id[tokenizer.tgt_lang]
+    # Tokenize and translate the text
+    encoded_text = tokenizer(text, return_tensors="pt")
+    #manual fix to hf bug 
+    encoded_text['input_ids'][:,1]=tokenizer.lang_code_to_id[tokenizer.src_lang]
 
-#     prev=''
-#     for t in text.split('\n\n'):
-#         # try:
-#         prev=_translate_text_chunk(t,prev,tokenizer,model,num_beams=num_beams,max_new_tokens=max_new_tokens)
-#         # except torch.cuda.OutOfMemoryError:
-#         #     model.to('cpu')
-#         #     prev=_translate_text_chunk(t,prev,tokenizer,model)
-#         #     model.to('cuda')
-#         ans+='\n\n'+prev
-#     return ans
 
-def gen_translate_text(text,tokenizer,model,num_beams=10,max_new_tokens=10**4):
+    encoded_text={k:v.to(model.device) for k,v in encoded_text.items()}
+
+    generated_tokens=model.generate(**encoded_text,forced_bos_token_id=lang_token,
+    	max_new_tokens=max_new_tokens,num_beams=num_beams,
+            no_repeat_ngram_size=7,#conservative about it
+            length_penalty=1.2,).cpu()#penalty_alpha=0.4,repetition_penalty=1.2,).cpu()
+
+    return tokenizer.decode(generated_tokens[0], skip_special_tokens=True)
+
+#repetition_penalty
+@torch.no_grad()
+def _translate_text_chunk_in_context(text,tgt_text,tokenizer,model,max_new_tokens=2000,num_beams=3):
+    # Tokenize and translate the text
+    encoded_text = tokenizer(text, return_tensors="pt")
+    #manual fix to hf bug 
+    encoded_text['input_ids'][:,1]=tokenizer.lang_code_to_id[tokenizer.src_lang]
+
+    tgt_tokens=tokenizer.encode(tgt_text,add_special_tokens=False)
+    tgt_tokens=torch.LongTensor([[SEP_TOKEN,tokenizer.lang_code_to_id[tokenizer.tgt_lang]]+tgt_tokens]).to(model.device)
+
+    encoded_text={k:v.to(model.device) for k,v in encoded_text.items()}
+
+    generated_tokens=model.generate(**encoded_text, decoder_input_ids=tgt_tokens,max_new_tokens=max_new_tokens,num_beams=num_beams,
+			no_repeat_ngram_size=7,#conservative about it
+            length_penalty=1.2,).cpu()#penalty_alpha=0.4,repetition_penalty=1.2,).cpu()
+
+    return tokenizer.decode(generated_tokens[0][tgt_tokens.shape[1]:], skip_special_tokens=True)
+
+def chunk_gen(text,tokenizer,spliter):
+	doc = spliter(text)
+
+	# Iterate over sentences and print them
+	for sentence in doc.sentences:
+	    yield (sentence.text)
+
+
+	# #3 extra tokens for sep lang ... sep
+	# toks=tokenizer.encode(text,add_special_tokens=False)
+	# while(len(toks)>=(100-3)):
+	# 	to_take=toks[:360-3]
+	# 	yield tokenizer.decode(to_take, skip_special_tokens=True)
+	# 	try:
+	# 		toks=toks[len(to_take):]
+	# 	except IndexError:
+	# 		return
+
+def gen_translate_text_pairs(text,spliter,tokenizer,model,num_beams=10,max_new_tokens=10**4):
     prev=''
+    prev_source=''
     for t in text.split('\n\n'):
-        prev=_translate_text_chunk(t,prev,tokenizer,model,num_beams=num_beams,max_new_tokens=max_new_tokens)
-        if(prev.replace('\n','').replace(' ','')==''):
-            #print('!!!problematic:')
-            prev=_translate_text_chunk(t,'',tokenizer,model,num_beams=num_beams,max_new_tokens=max_new_tokens)
-        yield '\n\n'+prev
-
-#dont use this
-def debug_test(text,tokenizer,model,num_beams=10,max_new_tokens=10**4):
-    
-    prev=''
-    for i,t in enumerate(text.split('\n\n')):
-        stoper=StopRepeatsDebug(count=3,ngram_size=1,context=40)
-        prev,toks=_debug_translate_text_chunk(t,prev,tokenizer,model,stoper,num_beams=num_beams,max_new_tokens=max_new_tokens)
-        if(prev.replace('\n','').replace(' ','')==''):
-            stoper=StopRepeatsDebug(count=3,ngram_size=1,context=40)
-            prev,toks=_debug_translate_text_chunk(t,'',tokenizer,model, stoper,num_beams=num_beams,max_new_tokens=max_new_tokens)
-        print('\n\n'+prev)
-        print(10*'\n')
-        # pat,rep=find_most_repeating_pattern(toks)
-        #print(rep)
-        #if(rep>3):
-        #print(toks)
-        #print([score[:,54505] for score in stoper.scores])
-        if(i>=9):
-            shows=list(set(toks[0][-40:-2]))
-            print(toks[0][-40:-2])
-            print(all([t in shows for t,c in enumerate(stoper.scores[-40:-2])]))
-            print([{s.item():x[:,s] for s in shows} for x in stoper.scores[-40:-2]])
-
-    #return ans
-    # print(10*'\n')
-    # print([score[:,54505] for score in stoper.scores])
-    #print(stoper.scores)
-    #print(10*'\n')
-    #print([torch.where(x == float('-inf'))[0] for x in stoper.scores])
-    #print(10*'\n')
-    #print(toks)
-    #print(10*'\n')
-    #print(stoper.inputs)
+        for chunk in chunk_gen(t,tokenizer,spliter):
+        	#ans=translate_text_chunk(chunk,tokenizer,model,num_beams=num_beams,max_new_tokens=max_new_tokens)
+        	input_chunk=f'{prev_source} {chunk}'
+        	ans =_translate_text_chunk_in_context(input_chunk,prev,tokenizer,model,num_beams=num_beams,max_new_tokens=max_new_tokens)
+        	yield chunk,ans
+        	prev=ans
+        	prev_source=chunk
 
 if __name__=="__main__":
-    import sqlite3
-    #s="תופעת_רשת"
+	import sqlite3
 
-    path=join('data','wikisql.db')
+	path=join('data','wikisql.db')
 
-    conn = sqlite3.connect(path)  # Replace 'your_database.db' with your database file path
-    cursor = conn.cursor()
+	conn = sqlite3.connect(path)  # Replace 'your_database.db' with your database file path
+	cursor = conn.cursor()
 
-    # Execute a query to select English texts
-    #cursor.execute("SELECT text FROM texts WHERE id IN (SELECT id FROM main_data WHERE lang = 'en') LIMIT 5")
+	# Execute a query to select English texts
+	#cursor.execute("SELECT text FROM texts WHERE id IN (SELECT id FROM main_data WHERE lang = 'en') LIMIT 5")
 
-    cursor.execute("""
-        SELECT texts.text
-        FROM main_data
-        INNER JOIN texts ON main_data.id = texts.id
-        WHERE main_data.lang = 'en'
-        LIMIT 5
-    """)
+	cursor.execute("""
+	    SELECT texts.text
+	    FROM main_data
+	    INNER JOIN texts ON main_data.id = texts.id
+	    WHERE main_data.lang = 'en'
+	    LIMIT 10
+	""")
+
+	# Fetch the results
+	english_texts = [x[0] for x in cursor.fetchall()]
 
 
-    # Fetch the results
-    english_texts = [x[0] for x in cursor.fetchall()]
+	model,tokenizer=get_quantmodel_and_tokenizer()
+	spliter=stanza.Pipeline(lang='en',verbose=False)
 
-    # Close the database connection
-    conn.close()
-
-    # # Print the retrieved English texts
-    # for text in english_texts:
-    #     print(text)  
-    text=english_texts[-2:][0]
-    
-    model,tokenizer=get_quantmodel_and_tokenizer()#get_model_and_tokenizer()
-    
-    debug_test(text,tokenizer,model)    
-    # for text in english_texts[:]:
-    #     print(text)
-    #     print(10*'\n')
-    #     trans=translate_text(text,tokenizer,model)
-    #     print(trans)
-    #     print(10*'\n')
-    
-    # for text in english_texts[-2:]:
-    #     print(text)
-    #     print(10*'\n')
-    #     for trans in gen_translate_text(text,tokenizer,model):
-    #         if(trans.replace('\n','').replace(' ','')==''):
-    #             print("\n\n!!!empty!!!")
-    #         else:
-    #             print(trans)
-    #     print(5*'\n')
-    
+	for text in english_texts:
+		for original,trans in gen_translate_text_pairs(text,spliter,tokenizer,model):
+			print(original)
+			print(2*"\n")
+			print(trans)
+			print(5*"\n")
