@@ -85,7 +85,7 @@ def gen_translate_text_pairs(text,spliter,tokenizer,model,num_beams=10,max_new_t
 
 if __name__=="__main__":
 
-	model,tokenizer=get_quantmodel_and_tokenizer()
+	model,tokenizer=get_model_and_tokenizer()
 	spliter=stanza.Pipeline(lang='en',verbose=False)
 
 	with open('test_text.txt') as f:
