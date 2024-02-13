@@ -88,9 +88,11 @@ if __name__=="__main__":
 	model,tokenizer=get_quantmodel_and_tokenizer()
 	spliter=stanza.Pipeline(lang='en',verbose=False)
 
-	for text in english_texts:
-		for original,trans in gen_translate_text_pairs(text,spliter,tokenizer,model):
-			print(original)
-			print(2*"\n")
-			print(trans)
-			print(5*"\n")
+	with open('test_text.txt') as f:
+		text=f.read()
+
+	for original,trans in gen_translate_text_pairs(text,spliter,tokenizer,model):
+		print(original)
+		print(2*"\n")
+		print(trans)
+		print(5*"\n")
