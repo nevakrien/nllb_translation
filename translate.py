@@ -7,25 +7,11 @@ import stanza
 
 SEP_TOKEN=2 #specific to nllb I just picked it up
 
-def get_model_and_tokenizer(tgt_lang="heb_Hebr",src_lang="eng_Latn",cuda=True):
+def get_model_and_tokenizer(tgt_lang="heb_Hebr",src_lang="eng_Latn"):
     model_name="facebook/nllb-200-3.3B"
     # Initialize the tokenizer and model
     tokenizer = NllbTokenizerFast.from_pretrained(model_name,tgt_lang=tgt_lang,src_lang=src_lang)
     model = AutoModelForSeq2SeqLM.from_pretrained(model_name)#,load_in_4bit=True)
-    #print(model.device)
-    
-    if(cuda):
-        model.to('cuda')
-
-    return model,tokenizer
-
-#gpu only sadly... mainly used for the testing enviorment
-def get_quantmodel_and_tokenizer(tgt_lang="heb_Hebr",src_lang="eng_Latn"):
-    model_name="facebook/nllb-200-3.3B"
-    # Initialize the tokenizer and model
-    tokenizer = NllbTokenizerFast.from_pretrained(model_name,tgt_lang=tgt_lang,src_lang=src_lang)
-    model = AutoModelForSeq2SeqLM.from_pretrained(model_name,load_in_4bit=True,bnb_4bit_compute_dtype=torch.float16)
-    #model.to('cpu')
     #print(model.device)
 
     return model,tokenizer
@@ -98,27 +84,6 @@ def gen_translate_text_pairs(text,spliter,tokenizer,model,num_beams=10,max_new_t
         	prev_source=chunk
 
 if __name__=="__main__":
-	import sqlite3
-
-	path=join('data','wikisql.db')
-
-	conn = sqlite3.connect(path)  # Replace 'your_database.db' with your database file path
-	cursor = conn.cursor()
-
-	# Execute a query to select English texts
-	#cursor.execute("SELECT text FROM texts WHERE id IN (SELECT id FROM main_data WHERE lang = 'en') LIMIT 5")
-
-	cursor.execute("""
-	    SELECT texts.text
-	    FROM main_data
-	    INNER JOIN texts ON main_data.id = texts.id
-	    WHERE main_data.lang = 'en'
-	    LIMIT 10
-	""")
-
-	# Fetch the results
-	english_texts = [x[0] for x in cursor.fetchall()]
-
 
 	model,tokenizer=get_quantmodel_and_tokenizer()
 	spliter=stanza.Pipeline(lang='en',verbose=False)
