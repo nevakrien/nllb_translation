@@ -24,9 +24,9 @@ if __name__=="__main__":
     wiki = wiki.remove_columns([col for col in wiki.column_names if col != "text"])  # only keep the 'text' column
 
     print('wiki data')
-    print(wiki[0])
+    print(len(wiki))
 
 
     print('book data')
-    print(bookcorpus[0])
+    print(len(bookcorpus))
 

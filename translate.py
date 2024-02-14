@@ -5,6 +5,8 @@ import os
 from os.path import join
 import stanza
 
+from tqdm import tqdm
+
 SEP_TOKEN=2 #specific to nllb I just picked it up
 
 def get_model_and_tokenizer(tgt_lang="heb_Hebr",src_lang="eng_Latn"):
@@ -83,16 +85,37 @@ def gen_translate_text_pairs(text,spliter,tokenizer,model,num_beams=10,max_new_t
         	prev=ans
         	prev_source=chunk
 
+def translate_text(text,spliter,tokenizer,model,num_beams=10,max_new_tokens=10**4):
+    ans=''
+    prev=''
+    prev_source=''
+
+    for t in tqdm(list(text.split('\n\n'))):
+        for chunk in chunk_gen(t,tokenizer,spliter):
+            #ans=translate_text_chunk(chunk,tokenizer,model,num_beams=num_beams,max_new_tokens=max_new_tokens)
+            input_chunk=f'{prev_source} {chunk}'
+            trans =_translate_text_chunk_in_context(input_chunk,prev,tokenizer,model,num_beams=num_beams,max_new_tokens=max_new_tokens)
+
+            ans+=trans
+            prev=trans
+            prev_source=chunk
+
+        ans+='\n\n'
+    return ans[:-2]
+
+
 if __name__=="__main__":
 
-	model,tokenizer=get_model_and_tokenizer()
-	spliter=stanza.Pipeline(lang='en',verbose=False)
+    model,tokenizer=get_model_and_tokenizer()
+    spliter=stanza.Pipeline(lang='en',verbose=False)
 
-	with open('test_text.txt') as f:
-		text=f.read()
+    with open('test_text.txt') as f:
+        text=f.read()
 
-	for original,trans in gen_translate_text_pairs(text,spliter,tokenizer,model):
-		print(original)
-		print(2*"\n")
-		print(trans)
-		print(5*"\n")
+    # 	for original,trans in gen_translate_text_pairs(text,spliter,tokenizer,model):
+    # 		print(original)
+    # 		print(2*"\n")
+    # 		print(trans)
+    # 		print(5*"\n")
+    trans= translate_text(text,spliter,tokenizer,model)
+    print(trans)
