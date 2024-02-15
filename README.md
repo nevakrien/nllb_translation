@@ -11,3 +11,5 @@ seems 4-bit works perfectly fine so we use that on gpu and then we can get a lot
 get stanza (it will attempt to overwrite ur pytorch installation...)
 after it is installed uninstall pytorch cpu and install pytorch gpu again.
 
+for xpu on intel cloud its best to use python 9 with this
+python -m pip install torch==1.13.0a0+git6c9b55e torchvision==0.14.1a0 intel-extension-for-pytorch==1.13.120+xpu --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/xpu-idp/us/

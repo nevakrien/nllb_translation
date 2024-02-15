@@ -103,10 +103,11 @@ def translate_text(text,spliter,tokenizer,model,num_beams=10,max_new_tokens=10**
         ans+='\n\n'
     return ans[:-2]
 
-
+import intel_extension_for_pytorch as ipex
 if __name__=="__main__":
 
     model,tokenizer=get_model_and_tokenizer()
+    model=model.to('xpu')
     spliter=stanza.Pipeline(lang='en',verbose=False)
 
     with open('test_text.txt') as f:
